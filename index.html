@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>행정구역 지도 편집기 | KBS Graphics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap');
+:root {
+  --bg: #04060e; --panel: #070a14; --border: #10182a; --border2: #1a2540;
+  --text: #c8d2e8; --sub: #6a7a9a; --dim: #2a3348;
+  --accent: #2a5fd4; --accent2: #6a9ff5;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── HEADER ── */
+#hdr {
+  height: 50px; flex-shrink: 0;
+  background: linear-gradient(90deg, #05091c, #07103a, #05091c);
+  border-bottom: 1px solid var(--border2);
+  display: flex; align-items: center; padding: 0 14px; gap: 10px;
+  position: relative;
+}
+#hdr::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #1a4acf 20%, #2a6aef 50%, #1a4acf 80%, transparent);
+}
+.kbadge {
+  background: linear-gradient(135deg, #1a3a9a, #2a5fd4); color: #fff;
+  padding: 2px 7px; border-radius: 3px; font-size: 11px; font-weight: 900;
+  letter-spacing: 1.5px; flex-shrink: 0;
+}
+#hdr-title { font-size: 14px; font-weight: 700; }
+#hdr-title span { color: #5a8ff5; }
+#breadcrumb {
+  display: flex; align-items: center; gap: 4px; margin-left: 10px;
+  font-size: 12px; color: var(--sub);
+}
+.bc { cursor: pointer; color: var(--accent2); font-weight: 700; transition: color .1s; }
+.bc:hover { color: #fff; }
+.bc.cur { cursor: default; color: var(--text); font-weight: 700; }
+.bc-sep { color: var(--dim); }
+.ml { margin-left: auto; }
+.flex { display: flex; align-items: center; gap: 7px; }
+
+/* ── TOOLBAR BUTTONS ── */
+.tbtn {
+  background: rgba(20, 32, 60, .9); border: 1px solid var(--border2);
+  color: var(--sub); padding: 4px 11px; border-radius: 4px;
+  cursor: pointer; font-size: 11px; font-weight: 600; font-family: inherit;
+  transition: all .15s; white-space: nowrap;
+}
+.tbtn:hover { border-color: #2a4a8a; color: var(--text); }
+.tbtn.on { background: rgba(42,95,212,.25); border-color: #2a5fd4; color: #6a9ff5; }
+.tbtn.purple { background: rgba(88,28,135,.2); border-color: rgba(139,92,246,.35); color: #c4b5fd; }
+.tbtn.purple:hover { border-color: rgba(139,92,246,.7); }
+
+/* ── MAIN ── */
+#main { flex: 1; display: flex; overflow: hidden; }
+
+/* ── LEFT PANEL ── */
+#lpanel {
+  width: 210px; flex-shrink: 0; background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.ps { font-size: 10px; color: #4a6aaa; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; padding: 9px 12px 5px; border-bottom: 1px solid var(--border); }
+.pb { padding: 8px 12px; }
+
+/* Layer controls */
+.lbtn {
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border2); border-radius: 4px;
+  padding: 6px 9px; cursor: pointer; transition: all .15s;
+  margin-bottom: 5px; font-size: 11px; font-weight: 600; color: var(--sub);
+  background: rgba(8,12,24,.9);
+}
+.lbtn:hover { border-color: #2a4a8a; color: var(--text); }
+.lbtn.on { background: rgba(42,95,212,.18); border-color: #2a5fd4; color: #6a9ff5; }
+.lbtn-ico { font-size: 13px; }
+
+/* Checkbox style */
+.chk-wrap { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 5px 0; user-select: none; }
+.chk-box {
+  width: 14px; height: 14px; border: 1px solid var(--border2); border-radius: 3px;
+  background: rgba(8,12,24,.9); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.chk-wrap.on .chk-box { background: rgba(42,95,212,.3); border-color: #2a5fd4; }
+.chk-box::after {
+  content: ''; width: 6px; height: 3px;
+  border-left: 1.5px solid #6a9ff5; border-bottom: 1.5px solid #6a9ff5;
+  transform: rotate(-45deg) translate(0.5px, -1px); display: none;
+}
+.chk-wrap.on .chk-box::after { display: block; }
+.chk-lbl { font-size: 11px; color: var(--sub); font-weight: 600; }
+.chk-wrap.on .chk-lbl { color: #6a9ff5; }
+
+/* Stroke slider */
+.srow { display: flex; align-items: center; gap: 7px; padding: 4px 0; }
+.slbl { font-size: 10px; color: var(--sub); font-weight: 600; white-space: nowrap; }
+input[type=range] { -webkit-appearance: none; flex: 1; height: 3px; background: var(--border2); border-radius: 2px; outline: none; cursor: pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%; background: #6a9ff5; cursor: pointer; }
+
+/* Color panel */
+.cpanel-hint { font-size: 10px; color: var(--sub); line-height: 1.65; margin-bottom: 7px; }
+.swatches { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; margin-bottom: 7px; }
+.sw {
+  width: 100%; aspect-ratio: 1; border-radius: 3px; cursor: pointer;
+  border: 2px solid transparent; transition: transform .1s, border-color .1s;
+}
+.sw:hover { transform: scale(1.18); }
+.sw.sel { border-color: #fff; }
+.cur-color-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cur-dot { width: 22px; height: 22px; border-radius: 3px; border: 1px solid var(--border2); flex-shrink: 0; }
+.hex-in {
+  flex: 1; background: #060810; border: 1px solid var(--border2); color: var(--text);
+  padding: 4px 8px; border-radius: 3px; font-size: 11px; font-family: 'Courier New', monospace; outline: none;
+}
+.hex-in:focus { border-color: #2a4a8a; }
+input[type=color].native-pick {
+  width: 22px; height: 22px; border: none; padding: 0; background: transparent;
+  cursor: pointer; border-radius: 3px; overflow: hidden; flex-shrink: 0;
+}
+.act-row { display: flex; gap: 5px; margin-top: 2px; }
+.act-btn {
+  flex: 1; padding: 5px 4px; border-radius: 3px; cursor: pointer;
+  font-size: 10px; font-weight: 600; font-family: inherit; border: 1px solid var(--border2);
+  background: rgba(8,12,24,.9); color: var(--sub); transition: all .15s; text-align: center;
+}
+.act-btn:hover { border-color: #2a4a8a; color: var(--text); }
+
+/* Export */
+.exp-btn {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border2); border-radius: 4px;
+  padding: 7px 10px; cursor: pointer; transition: all .15s;
+  margin-bottom: 5px; font-size: 11px; font-weight: 600; color: var(--sub);
+  background: rgba(8,12,24,.9); text-align: left; font-family: inherit;
+}
+.exp-btn:hover { border-color: #2a4a8a; color: var(--text); }
+.exp-btn:disabled { opacity: .4; cursor: not-allowed; }
+.exp-btn.psd { background: rgba(88,28,135,.12); border-color: rgba(139,92,246,.3); color: #c4b5fd; }
+.exp-btn.psd:hover { border-color: rgba(139,92,246,.65); }
+.exp-btn .exp-sub { font-size: 9.5px; opacity: .65; display: block; margin-top: 1px; }
+
+/* ── MAP AREA ── */
+#mwrap { flex: 1; position: relative; overflow: hidden; }
+#msvg { width: 100%; height: 100%; }
+#msvg path { stroke-linejoin: round; }
+
+/* Loading */
+#lw {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  background: rgba(4,6,14,.93); backdrop-filter: blur(4px); z-index: 100;
+}
+.spin { width: 28px; height: 28px; border: 3px solid #1a2a40; border-top-color: #3a5ad4; border-radius: 50%; animation: spin .7s linear infinite; }
+#ltxt { font-size: 12px; color: var(--sub); font-weight: 600; max-width: 240px; text-align: center; line-height: 1.6; }
+
+/* Drill nav */
+#dnav { position: absolute; top: 12px; left: 12px; z-index: 20; display: none; }
+.back-btn {
+  background: rgba(18,89,195,.8); border: 1px solid #2a6aef; color: #fff;
+  padding: 6px 14px; border-radius: 5px; cursor: pointer;
+  font-size: 12px; font-weight: 700; font-family: inherit;
+  backdrop-filter: blur(6px); transition: all .15s;
+}
+.back-btn:hover { background: #2a6aef; }
+
+/* EMD progress overlay */
+#emd-prog {
+  position: absolute; top: 12px; right: 12px; z-index: 20; display: none;
+  background: rgba(4,6,14,.92); border: 1px solid var(--border2);
+  border-radius: 5px; padding: 8px 12px; min-width: 170px;
+}
+#emd-prog.on { display: block; }
+#ep-txt { font-size: 11px; color: var(--sub); margin-bottom: 5px; }
+#ep-bar { height: 3px; background: var(--border2); border-radius: 2px; }
+#ep-fill { height: 100%; background: #2a5fd4; border-radius: 2px; transition: width .2s; }
+
+/* Tooltip */
+#tip {
+  position: absolute; pointer-events: none; z-index: 25;
+  background: rgba(4,6,14,.96); border: 1px solid var(--border2);
+  border-radius: 5px; padding: 5px 10px; font-size: 12px; font-weight: 600;
+  display: none; backdrop-filter: blur(8px); white-space: nowrap;
+}
+
+/* ── COLOR PICKER POPUP ── */
+#cpp {
+  position: fixed; z-index: 300; background: #0a0e1c;
+  border: 1px solid var(--border2); border-radius: 8px; padding: 12px;
+  display: none; box-shadow: 0 16px 48px rgba(0,0,0,.95); min-width: 185px;
+}
+#cpp.on { display: block; }
+#cpp-name { font-size: 12px; font-weight: 700; margin-bottom: 8px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.cpp-swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-bottom: 8px; }
+.csw { width: 22px; height: 22px; border-radius: 3px; cursor: pointer; border: 2px solid transparent; transition: transform .1s; }
+.csw:hover { transform: scale(1.15); }
+.csw.sel { border-color: #fff; }
+.cpp-row { display: flex; gap: 5px; align-items: center; margin-bottom: 8px; }
+.cpp-hex { flex: 1; background: #060810; border: 1px solid var(--border2); color: var(--text); padding: 5px 8px; border-radius: 3px; font-size: 11px; font-family: monospace; outline: none; }
+.cpp-hex:focus { border-color: #2a4a8a; }
+.cpp-preview { width: 26px; height: 26px; border-radius: 3px; border: 1px solid var(--border2); flex-shrink: 0; }
+.cpp-native { width: 26px; height: 26px; border: none; padding: 0; background: transparent; cursor: pointer; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.cpp-btns { display: flex; gap: 5px; }
+.cpp-btn { flex: 1; padding: 6px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 600; font-family: inherit; border: 1px solid var(--border2); background: transparent; color: var(--sub); transition: all .15s; }
+.cpp-btn:hover { color: var(--text); border-color: #3a4a6a; }
+.cpp-btn.ok { background: rgba(42,95,212,.3); border-color: #2a5fd4; color: #6a9ff5; }
+
+/* ── SETTINGS MODAL ── */
+#sov { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.82); align-items: center; justify-content: center; z-index: 400; }
+#sov.on { display: flex; }
+#sm { background: #0a0e1c; border: 1px solid var(--border2); border-radius: 9px; padding: 22px; width: 400px; max-width: 95vw; box-shadow: 0 28px 70px rgba(0,0,0,.9); }
+.mt { font-size: 14px; font-weight: 700; margin-bottom: 14px; }
+.mg { margin-bottom: 10px; }
+.ml2 { font-size: 11px; color: var(--sub); font-weight: 600; display: block; margin-bottom: 4px; }
+.mi { width: 100%; padding: 7px 10px; border-radius: 4px; background: #060810; border: 1px solid var(--border2); color: var(--text); font-size: 12px; outline: none; font-family: inherit; }
+.mi:focus { border-color: #2a4a8a; }
+.mh { font-size: 10px; color: var(--dim); margin-top: 3px; line-height: 1.5; }
+.mbtns { display: flex; gap: 6px; margin-top: 14px; }
+.mok { flex: 1; padding: 9px; border-radius: 4px; cursor: pointer; background: rgba(42,95,212,.3); border: 1px solid #2a5fd4; color: #6a9ff5; font-size: 12px; font-weight: 700; font-family: inherit; }
+.mcancel { padding: 9px 14px; border-radius: 4px; cursor: pointer; background: transparent; border: 1px solid var(--border2); color: var(--sub); font-size: 12px; font-family: inherit; }
+.mrefresh { padding: 9px 11px; border-radius: 4px; cursor: pointer; background: rgba(42,95,212,.08); border: 1px solid rgba(42,95,212,.25); color: #6b9cf5; font-size: 11px; font-family: inherit; }
+
+/* color-mode cursor */
+body.cmode #mwrap { cursor: crosshair; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #060810; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div id="hdr">
+  <div class="kbadge">KBS</div>
+  <div id="hdr-title">행정구역 지도 편집기 <span>Graphics</span></div>
+
+  <div id="breadcrumb">
+    <span class="bc" id="bc0" onclick="drillNational()">전국</span>
+    <span class="bc-sep" id="bc1sep" style="display:none">›</span>
+    <span id="bc1" style="display:none"></span>
+    <span class="bc-sep" id="bc2sep" style="display:none">›</span>
+    <span id="bc2" class="bc cur" style="display:none"></span>
+  </div>
+
+  <div class="ml flex">
+    <button class="tbtn" id="btn-cmode" onclick="toggleCmode()">🎨 색상 편집 OFF</button>
+    <button class="tbtn" onclick="openSettings()">⚙ 설정</button>
+  </div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div id="main">
+
+  <!-- LEFT PANEL -->
+  <div id="lpanel">
+
+    <div class="ps">경계 레이어</div>
+    <div class="pb">
+      <div class="lbtn" id="btn-sgg" onclick="toggleSgg()">
+        <span class="lbtn-ico">⬡</span> 시군구 경계 표시
+      </div>
+      <div class="chk-wrap" id="chk-emd" onclick="toggleEmd()">
+        <div class="chk-box"></div>
+        <span class="chk-lbl">읍면동 경계 표시</span>
+      </div>
+      <div class="srow" style="margin-top:8px">
+        <span class="slbl">경계 굵기</span>
+        <input type="range" id="sw-rng" min="0.1" max="3" step="0.05" value="0.5" oninput="onStroke(+this.value)">
+      </div>
+    </div>
+
+    <div class="ps">색상 편집</div>
+    <div class="pb">
+      <div class="cpanel-hint">
+        우상단 <b style="color:#6a9ff5">🎨 색상 편집</b>을 ON 하고<br>지역을 클릭하면 색상을 바꿀 수 있습니다.
+      </div>
+      <div class="swatches" id="sw-grid"></div>
+      <div class="cur-color-row">
+        <div class="cur-dot" id="cur-dot"></div>
+        <input type="text" class="hex-in" id="hex-in" maxlength="7" oninput="onHexIn(this.value)">
+        <input type="color" class="native-pick" id="nat-pick" oninput="onNatPick(this.value)">
+      </div>
+      <div class="act-row">
+        <button class="act-btn" onclick="fillAll()">◼ 현재뷰 전체 적용</button>
+        <button class="act-btn" onclick="resetColors()">↺ 전체 초기화</button>
+      </div>
+    </div>
+
+    <div class="ps">내보내기</div>
+    <div class="pb">
+      <button class="exp-btn" onclick="exportPNG()">
+        <span>📷</span>
+        <span>PNG 내보내기<span class="exp-sub">현재 화면 캡처</span></span>
+      </button>
+      <button class="exp-btn psd" id="btn-psd" onclick="exportPSD()">
+        <span>📐</span>
+        <span>Photopea PSD<span class="exp-sub">현재 뷰 → Shape Layer</span></span>
+      </button>
+    </div>
+
+    <div style="flex:1"></div>
+    <div class="pb" style="padding-bottom:14px">
+      <div style="font-size:10px;color:var(--dim);line-height:1.7">
+        SGIS API 키가 없으면 CDN 기본지도를 사용합니다.<br>
+        읍면동은 SGIS 키 필요.
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="mwrap">
+    <div id="lw">
+      <div class="spin"></div>
+      <div id="ltxt">지도를 불러오는 중입니다...</div>
+    </div>
+
+    <div id="dnav">
+      <button class="back-btn" onclick="drillBack()">⬅ 뒤로</button>
+    </div>
+
+    <svg id="msvg"></svg>
+
+    <div id="emd-prog">
+      <div id="ep-txt">읍면동 로딩 중...</div>
+      <div id="ep-bar"><div id="ep-fill" style="width:0"></div></div>
+    </div>
+
+    <div id="tip"></div>
+  </div>
+</div>
+
+<!-- ══ COLOR PICKER POPUP ══ -->
+<div id="cpp">
+  <div id="cpp-name"></div>
+  <div class="cpp-swatches" id="cpp-swatches"></div>
+  <div class="cpp-row">
+    <div class="cpp-preview" id="cpp-prev"></div>
+    <input type="text" class="cpp-hex" id="cpp-hex" maxlength="7" oninput="onCppHex(this.value)">
+    <input type="color" class="cpp-native" id="cpp-nat" oninput="onCppNat(this.value)">
+  </div>
+  <div class="cpp-btns">
+    <button class="cpp-btn ok" onclick="cppApply()">적용</button>
+    <button class="cpp-btn" onclick="cppClear()">초기화</button>
+    <button class="cpp-btn" onclick="cppClose()">취소</button>
+  </div>
+</div>
+
+<!-- ══ SETTINGS MODAL ══ -->
+<div id="sov" onclick="if(event.target===this)closeSettings()">
+  <div id="sm">
+    <div class="mt">⚙ SGIS API 설정</div>
+    <div class="mg">
+      <label class="ml2">Consumer Key</label>
+      <input class="mi" type="text" id="in-key" placeholder="SGIS Consumer Key">
+    </div>
+    <div class="mg">
+      <label class="ml2">Consumer Secret</label>
+      <input class="mi" type="password" id="in-sec" placeholder="SGIS Consumer Secret">
+    </div>
+    <div class="mg">
+      <label class="ml2">CORS 프록시 URL</label>
+      <input class="mi" type="text" id="in-prx" placeholder="https://api.allorigins.win/raw?url=">
+      <div class="mh">⚠ SGIS API는 CORS 제한이 있어 프록시가 필요합니다.<br>allorigins.win 또는 자체 프록시를 사용하세요.</div>
+    </div>
+    <div class="mbtns">
+      <button class="mok" onclick="saveSettings()">저장 및 적용</button>
+      <button class="mrefresh" onclick="forceRefresh()">🗺 지도 강제 갱신</button>
+      <button class="mcancel" onclick="closeSettings()">취소</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════
+//  CONSTANTS
+// ══════════════════════════════════════════════
+const DB_NAME  = 'KBSMapEdDB';
+const DB_VER   = 2;
+const YEAR     = 2023;
+
+const COLORS = [
+  '#1e293b','#0f172a','#1d4ed8','#2563eb','#3b82f6','#60a5fa',
+  '#0369a1','#0ea5e9','#06b6d4','#14b8a6','#10b981','#22c55e',
+  '#84cc16','#ca8a04','#f97316','#ea580c','#ef4444','#dc2626',
+  '#e11d48','#db2777','#a855f7','#7c3aed','#4f46e5','#6366f1',
+  '#fff','#e2e8f0','#94a3b8','#475569','#334155','#1e293b',
+  '#7f1d1d','#451a03','#164e63','#052e16','#1e1b4b','#2d1657'
+];
+
+const DEF_FILL     = '#1a2540';
+const SIDO_STROKE  = 'rgba(0,0,0,0.75)';
+const SGG_STROKE   = 'rgba(60,80,120,0.7)';
+const EMD_STROKE   = 'rgba(40,55,90,0.6)';
+const HL_STROKE    = '#6a9ff5';
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+const ST = {
+  // API
+  key:'', secret:'', proxy:'',
+  // Geo data
+  sidoGeo: null, sggGeo: null,
+  emdData: {},          // sidoCode → Feature[]
+  emdLoaded: new Set(),
+  geoLoaded: false,
+  // Drill state:  0=national  1=sido  2=sgg
+  level: 0,
+  selSido: null,        // { code, name, feat }
+  selSgg:  null,        // { code, name, feat }
+  // Layer toggles
+  showSgg: false,
+  showEmd: false,
+  // Color
+  cmode:  false,
+  colors: {},           // code → hex
+  active: '#1d4ed8',
+  // Map
+  strokeW: 0.5,
+  zoom: null, xform: null,
+  proj: null, path: null,
+};
+
+// ══════════════════════════════════════════════
+//  INDEXEDDB
+// ══════════════════════════════════════════════
+function dbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('geo')) db.createObjectStore('geo');
+    };
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+async function dbSet(key, val) {
+  try {
+    const db = await dbOpen();
+    const tx = db.transaction('geo', 'readwrite');
+    tx.objectStore('geo').put(val, key);
+    return new Promise(r => { tx.oncomplete = () => r(true); tx.onerror = () => r(false); });
+  } catch { return false; }
+}
+async function dbGet(key) {
+  try {
+    const db  = await dbOpen();
+    const tx  = db.transaction('geo', 'readonly');
+    const req = tx.objectStore('geo').get(key);
+    return new Promise((r, j) => { req.onsuccess = () => r(req.result); req.onerror = () => j(req.error); });
+  } catch { return null; }
+}
+async function dbClearAll() {
+  try {
+    const db = await dbOpen();
+    const tx = db.transaction('geo', 'readwrite');
+    tx.objectStore('geo').clear();
+  } catch {}
+}
+
+// ══════════════════════════════════════════════
+//  COORD CONVERSION  (UTMK → WGS84)
+// ══════════════════════════════════════════════
+function utmk2wgs(x, y) {
+  const a=6378137, e2=0.00669438002290, dx=1e6, dy=2e6,
+        lo=127.5*Math.PI/180, po=38*Math.PI/180;
+  const px=x-dx, py=y-dy;
+  const e4=e2*e2, e6=e4*e2;
+  const M0=a*((1-e2/4-3*e4/64-5*e6/256)*po
+    -(3*e2/8+3*e4/32+45*e6/1024)*Math.sin(2*po)
+    +(15*e4/256+45*e6/1024)*Math.sin(4*po));
+  const M=M0+py;
+  const mu=M/(a*(1-e2/4-3*e4/64-5*e6/256));
+  const e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2));
+  const phi=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)
+    +(21*e1**2/16)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu);
+  const sp=Math.sin(phi),cp=Math.cos(phi),tp=sp/cp;
+  const N=a/Math.sqrt(1-e2*sp*sp), T=tp*tp, C=e2/(1-e2)*cp*cp;
+  const R=a*(1-e2)/(1-e2*sp*sp)**1.5, D=px/N;
+  const lat=phi-(N*tp/R)*(D*D/2-(5+3*T+10*C-4*C*C)*D**4/24+(61+90*T+298*C+45*T*T)*D**6/720);
+  const lon=lo+(D-(1+2*T+C)*D**3/6+(5-2*C+28*T)*D**5/120)/cp;
+  return [+(lon*180/Math.PI).toFixed(5), +(lat*180/Math.PI).toFixed(5)];
+}
+function convCoord(c) {
+  if (!c) return c;
+  if (typeof c[0] === 'number') return utmk2wgs(c[0], c[1]);
+  return c.map(convCoord);
+}
+function isUtmk(geo) {
+  try {
+    let c = geo.features[0]?.geometry?.coordinates;
+    while (Array.isArray(c[0])) c = c[0];
+    return Math.abs(c[0]) > 500;
+  } catch { return false; }
+}
+function convertGeo(geo) {
+  if (!isUtmk(geo)) return geo;
+  return { ...geo, features: geo.features.map(f => ({
+    ...f,
+    geometry: { ...f.geometry, coordinates: convCoord(f.geometry.coordinates) }
+  }))};
+}
+function convertFeats(feats) {
+  return convertGeo({ type: 'FeatureCollection', features: feats }).features;
+}
+
+// ══════════════════════════════════════════════
+//  PROP HELPERS
+// ══════════════════════════════════════════════
+function getAdmCd(p) {
+  return String(p.adm_cd || p._code || p.SIGUNGU_CD || p.sig_cd || p.SIG_CD || p.CD || '');
+}
+function getAdmNm(p) {
+  return String(p.adm_nm || p._name || p.name || p.SIGUNGU_NM || p.SIG_KOR_NM || p.NAME_1 || '').trim();
+}
+function getSidoCode(p) {
+  const cd = getAdmCd(p);
+  return String(p._sidoCode || p.sido || (cd.length >= 2 ? cd.slice(0,2) : '') || '');
+}
+function normFeats(feats, extraProps = {}) {
+  return feats.map(f => {
+    const p  = f.properties;
+    const cd = getAdmCd(p);
+    const nm = getAdmNm(p);
+    return { ...f, properties: { ...p, _code: cd, _name: nm, ...extraProps } };
+  });
+}
+
+// ══════════════════════════════════════════════
+//  SGIS API
+// ══════════════════════════════════════════════
+async function sgisAuth() {
+  const { key, secret, proxy } = ST;
+  if (!key || !secret) throw new Error('SGIS 키가 없습니다. ⚙ 설정에서 입력해주세요.');
+
+  const authUrl = `https://sgisapi.mods.go.kr/OpenAPI3/auth/authentication.json?consumer_key=${encodeURIComponent(key)}&consumer_secret=${encodeURIComponent(secret)}`;
+
+  // Try direct first, then proxy
+  for (const url of [authUrl, proxyUrl(proxy, authUrl)]) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (d.errCd === 0) return d.result.accessToken;
+    } catch {}
+  }
+  throw new Error('SGIS 인증 실패. 키/프록시를 확인해주세요.');
+}
+
+function proxyUrl(proxy, url) {
+  return proxy.replace(/\/$/, '') + '&url=' + encodeURIComponent(url);
+}
+
+function buildUrl(token, admCd, lowSearch, year=YEAR) {
+  const adm = admCd ? `&adm_cd=${encodeURIComponent(admCd)}` : '';
+  return `https://sgisapi.mods.go.kr/OpenAPI3/boundary/hadmarea.geojson?accessToken=${encodeURIComponent(token)}&year=${year}${adm}&low_search=${lowSearch}`;
+}
+
+async function sgisGet(url) {
+  const { proxy } = ST;
+  if (!proxy) throw new Error('프록시 없음');
+  const r = await fetch(proxyUrl(proxy, url));
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = await r.json();
+  if (d.errCd !== undefined && d.errCd !== 0) throw new Error(d.errMsg || 'API 오류');
+  return d;
+}
+
+async function runPool(tasks, limit) {
+  let i = 0;
+  const worker = async () => { while (i < tasks.length) await tasks[i++](); };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+}
+
+// ══════════════════════════════════════════════
+//  GEO LOAD  (SGIS → IndexedDB → CDN fallback)
+// ══════════════════════════════════════════════
+async function loadGeo() {
+  setLoading(true, '캐시에서 지도 로딩 중...');
+
+  // 1) Cache hit
+  try {
+    const [cs, cg] = await Promise.all([dbGet('sido'), dbGet('sgg')]);
+    if (cs?.features && cg?.features) {
+      ST.sidoGeo = cs; ST.sggGeo = cg;
+      // Restore EMD caches
+      const scodes = [...new Set(cg.features.map(f => getSidoCode(f.properties)).filter(Boolean))];
+      for (const sc of scodes) {
+        const ce = await dbGet('emd_' + sc);
+        if (ce?.features) { ST.emdData[sc] = ce.features; ST.emdLoaded.add(sc); }
+      }
+      ST.geoLoaded = true;
+      setLoading(false);
+      buildMap();
+      return;
+    }
+  } catch {}
+
+  // 2) SGIS fetch
+  if (ST.key && ST.secret && ST.proxy) {
+    const ok = await fetchSGIS();
+    if (ok) return;
+  }
+
+  // 3) CDN fallback
+  setLoading(true, 'SGIS 미설정 → CDN 기본지도 로딩 중...');
+  try {
+    const [sd, sg] = await Promise.all([
+      fetch('https://cdn.jsdelivr.net/gh/southkorea/southkorea-maps@master/gadm/json/skorea-provinces-geo.json').then(r=>r.json()),
+      fetch('https://cdn.jsdelivr.net/gh/southkorea/southkorea-maps@master/gadm/json/skorea-municipalities-geo.json').then(r=>r.json()),
+    ]);
+    const sg2 = convertGeo(sg);
+    // Patch sidoCode from SIGUNGU_CD prefix
+    sg2.features.forEach(f => {
+      const cd = getAdmCd(f.properties);
+      if (!f.properties._sidoCode && cd.length >= 2) f.properties._sidoCode = cd.slice(0,2);
+    });
+    ST.sidoGeo = { ...convertGeo(sd), features: normFeats(convertGeo(sd).features) };
+    ST.sggGeo  = { ...sg2, features: normFeats(sg2.features) };
+    ST.geoLoaded = true;
+    setLoading(false);
+    buildMap();
+  } catch (e) {
+    setLoading(true, `❌ 지도 로드 실패: ${e.message}\n⚙ 설정에서 SGIS 키를 입력해 주세요.`);
+  }
+}
+
+async function fetchSGIS() {
+  setLoading(true, 'SGIS 인증 중...');
+  try {
+    const token = await sgisAuth();
+
+    // Try years 2023 → 2010
+    let sidoFeats = null, actualYear = YEAR;
+    for (let yr = YEAR; yr >= 2010; yr--) {
+      try {
+        const d = await sgisGet(buildUrl(token, '', 0, yr));
+        if (d.features?.length) { sidoFeats = d.features; actualYear = yr; break; }
+      } catch {}
+    }
+    if (!sidoFeats) throw new Error('시도 데이터 없음');
+
+    setLoading(true, `시도·시군구 다운로드 중... (${sidoFeats.length}개 시도)`);
+
+    const detSido = [], sggAll = [];
+    let done = 0;
+
+    const tasks = sidoFeats.map(sf => async () => {
+      const code = String(sf.properties.adm_cd || '');
+      // Detailed sido boundary
+      try {
+        const d = await sgisGet(buildUrl(token, code, 0, actualYear));
+        if (d.features?.[0]) {
+          const f = d.features[0];
+          f.properties.adm_cd = code;
+          f.properties.adm_nm = sf.properties.adm_nm;
+          detSido.push(f);
+        } else detSido.push(sf);
+      } catch { detSido.push(sf); }
+      // Sigungu
+      try {
+        const d = await sgisGet(buildUrl(token, code, 1, actualYear));
+        if (d.features) d.features.forEach(f => { f.properties._sidoCode = code; sggAll.push(f); });
+      } catch {}
+      done++;
+      setLoading(true, `시도/시군구 다운로드 중... (${done}/${sidoFeats.length})`);
+    });
+
+    await runPool(tasks, 5);
+
+    // Merge simplified + detailed
+    const finalSido = sidoFeats.map(sf => {
+      const code = String(sf.properties.adm_cd || '');
+      return detSido.find(f => String(f.properties.adm_cd||'') === code) || sf;
+    });
+
+    const sidoGeo = { type:'FeatureCollection', features: normFeats(convertFeats(finalSido)) };
+    const sggGeo  = { type:'FeatureCollection', features: normFeats(convertFeats(sggAll)) };
+
+    await dbSet('sido', sidoGeo);
+    await dbSet('sgg',  sggGeo);
+
+    ST.sidoGeo = sidoGeo; ST.sggGeo = sggGeo;
+    ST.geoLoaded = true;
+    setLoading(false);
+    buildMap();
+    return true;
+  } catch (e) {
+    console.warn('[SGIS]', e.message);
+    setLoading(true, `SGIS 실패: ${e.message} → CDN fallback 시도 중...`);
+    return false;
+  }
+}
+
+// EMD load for a single sido (fetches per sigungu)
+async function loadEmdForSido(sidoCode) {
+  if (ST.emdLoaded.has(sidoCode)) { renderEmdLayer(); return; }
+
+  // Cache check
+  const cached = await dbGet('emd_' + sidoCode);
+  if (cached?.features) {
+    ST.emdData[sidoCode] = cached.features;
+    ST.emdLoaded.add(sidoCode);
+    renderEmdLayer();
+    return;
+  }
+
+  if (!ST.key || !ST.secret || !ST.proxy) {
+    showEmdProg(false);
+    alert('읍면동 데이터는 SGIS API 키가 필요합니다.\n⚙ 설정에서 입력해주세요.');
+    return;
+  }
+
+  const sggFeats = (ST.sggGeo?.features || []).filter(f => getSidoCode(f.properties) === sidoCode);
+  if (!sggFeats.length) return;
+
+  try {
+    const token = await sgisAuth();
+    const feats = [];
+    let done = 0;
+
+    showEmdProg(true, sggFeats.length, 0);
+
+    const tasks = sggFeats.map(sf => async () => {
+      const sggCode = String(sf.properties._code || '');
+      if (!sggCode) return;
+      try {
+        const d = await sgisGet(buildUrl(token, sggCode, 1));
+        if (d.features) {
+          const conv = convertFeats(d.features);
+          conv.forEach(f => { f.properties._sidoCode = sidoCode; f.properties._sggCode = sggCode; });
+          feats.push(...conv);
+        }
+      } catch {}
+      done++;
+      showEmdProg(true, sggFeats.length, done);
+    });
+
+    await runPool(tasks, 5);
+    const normed = normFeats(feats);
+    ST.emdData[sidoCode] = normed;
+    ST.emdLoaded.add(sidoCode);
+    await dbSet('emd_' + sidoCode, { type:'FeatureCollection', features: normed });
+    showEmdProg(false);
+    renderEmdLayer();
+  } catch (e) {
+    showEmdProg(false);
+    console.warn('[EMD]', e.message);
+  }
+}
+
+// EMD load nationwide (all sidos, progressive)
+async function loadAllEmd() {
+  const scodes = [...new Set((ST.sggGeo?.features||[]).map(f=>getSidoCode(f.properties)).filter(Boolean))];
+  for (const sc of scodes) await loadEmdForSido(sc);
+}
+
+// EMD load for current sido (drill level ≥ 1)
+async function loadEmdCurrent() {
+  if (!ST.selSido) { await loadAllEmd(); return; }
+  await loadEmdForSido(ST.selSido.code);
+}
+
+// ══════════════════════════════════════════════
+//  D3 MAP
+// ══════════════════════════════════════════════
+let SVG, G, LSIDO, LSGG, LEMD, LLBL;
+const SIDO_LBL_SHORTENER = nm => nm
+  .replace('특별자치도','').replace('특별자치시','').replace('특별시','')
+  .replace('광역시','').replace(/도$/,'').slice(0,3);
+
+function buildMap() {
+  const el  = document.getElementById('msvg');
+  const W   = el.clientWidth  || 900;
+  const H   = el.clientHeight || 700;
+
+  SVG = d3.select('#msvg').attr('viewBox', `0 0 ${W} ${H}`);
+  SVG.selectAll('*').remove();
+
+  // Zoom
+  ST.zoom = d3.zoom().scaleExtent([0.5, 60]).on('zoom', ev => {
+    const k = ev.transform.k;
+    ST.xform = ev.transform;
+    G.attr('transform', ev.transform);
+    LSIDO.attr('stroke-width', ST.strokeW / k);
+    LSGG.attr('stroke-width', 0.45 / k);
+    LEMD.attr('stroke-width', 0.25 / k);
+    LLBL.selectAll('text').attr('transform', function(d) {
+      try { const [cx,cy] = ST.path.centroid(d); return `translate(${cx},${cy})scale(${1/k})`; }
+      catch { return 'translate(0,0)'; }
+    });
+  });
+  SVG.call(ST.zoom).on('dblclick.zoom', null);
+
+  G    = SVG.append('g').attr('id','mg');
+  LSIDO = G.append('g').attr('id','lsido').attr('stroke', SIDO_STROKE).attr('stroke-width', ST.strokeW).attr('stroke-linejoin','round');
+  LSGG  = G.append('g').attr('id','lsgg').attr('stroke', SGG_STROKE).attr('stroke-width', 0.45).attr('stroke-linejoin','round');
+  LEMD  = G.append('g').attr('id','lemd').attr('stroke', EMD_STROKE).attr('stroke-width', 0.25).attr('stroke-linejoin','round');
+  LLBL  = G.append('g').attr('id','llbl');
+
+  ST.proj = d3.geoMercator().fitExtent([[20,20],[W-20,H-20]], ST.sidoGeo);
+  ST.path = d3.geoPath().projection(ST.proj);
+
+  drawSido();
+  drawSgg();
+  renderEmdLayer();
+  drawLabels();
+  applyView();
+}
+
+function drawSido() {
+  LSIDO.selectAll('.sp')
+    .data(ST.sidoGeo.features, d => d.properties._code)
+    .join('path').attr('class','sp')
+    .attr('d', ST.path)
+    .attr('fill', d => getFill(d.properties._code))
+    .style('cursor','pointer')
+    .on('mouseover', function(ev, d) { d3.select(this).attr('opacity', .72); showTip(ev, d.properties._name); })
+    .on('mousemove', moveTip)
+    .on('mouseout',  function() { d3.select(this).attr('opacity', 1); hideTip(); })
+    .on('click', (ev, d) => {
+      ev.stopPropagation();
+      if (ST.cmode) { openCpp(ev, d.properties._code, d.properties._name); return; }
+      if (ST.level === 0) drillSido(d);
+    });
+}
+
+function drawSgg() {
+  LSGG.selectAll('.gp')
+    .data(ST.sggGeo.features, d => d.properties._code)
+    .join('path').attr('class','gp')
+    .attr('d', ST.path)
+    .attr('fill', d => getFill(d.properties._code))
+    .style('cursor','pointer')
+    .on('mouseover', function(ev, d) {
+      const isActive = getSidoCode(d.properties) === ST.selSido?.code;
+      if (!ST.showSgg && ST.level === 0) return;
+      if (ST.level >= 1 && !isActive) return;
+      d3.select(this).attr('opacity', .72);
+      showTip(ev, d.properties._name);
+    })
+    .on('mousemove', moveTip)
+    .on('mouseout',  function() { d3.select(this).attr('opacity', 1); hideTip(); })
+    .on('click', (ev, d) => {
+      ev.stopPropagation();
+      const sc = getSidoCode(d.properties);
+      if (ST.cmode && (ST.showSgg || ST.level >= 1)) {
+        const isActive = sc === ST.selSido?.code;
+        if (ST.level === 0 || isActive) { openCpp(ev, d.properties._code, d.properties._name); return; }
+      }
+      if (ST.level === 0 && ST.showSgg) {
+        // Click sgg overlay → drill into parent sido first
+        const sidoFeat = ST.sidoGeo.features.find(f => f.properties._code === sc);
+        if (sidoFeat) drillSido(sidoFeat);
+        return;
+      }
+      if (ST.level === 1 && sc === ST.selSido?.code) drillSgg(d);
+    });
+}
+
+function renderEmdLayer() {
+  const allEmd = Object.values(ST.emdData).flat();
+  LEMD.selectAll('.ep')
+    .data(allEmd, d => d.properties._code || d.properties.adm_cd || '')
+    .join('path').attr('class','ep')
+    .attr('d', ST.path)
+    .attr('fill', d => getFill(d.properties._code || ''))
+    .style('cursor','pointer')
+    .on('mouseover', function(ev, d) {
+      const isActive = !ST.selSgg || d.properties._sggCode === ST.selSgg.code;
+      d3.select(this).attr('opacity', .72);
+      showTip(ev, d.properties._name || getAdmNm(d.properties));
+    })
+    .on('mousemove', moveTip)
+    .on('mouseout',  function() { d3.select(this).attr('opacity', 1); hideTip(); })
+    .on('click', (ev, d) => {
+      ev.stopPropagation();
+      if (ST.cmode && (ST.showEmd || ST.level >= 2)) {
+        const code = d.properties._code || d.properties.adm_cd || '';
+        openCpp(ev, code, d.properties._name || getAdmNm(d.properties));
+      }
+    });
+  applyView();
+}
+
+function drawLabels() {
+  LLBL.selectAll('.sl')
+    .data(ST.sidoGeo.features, d => d.properties._code)
+    .join('text').attr('class','sl')
+    .attr('transform', d => {
+      try {
+        const [cx,cy] = ST.path.centroid(d);
+        const nm = d.properties._name;
+        // Gyeonggi offset
+        if (nm && (nm.includes('경기'))) return `translate(${cx+15},${cy+25})`;
+        return `translate(${cx},${cy})`;
+      } catch { return 'translate(0,0)'; }
+    })
+    .attr('text-anchor','middle').attr('dominant-baseline','middle')
+    .attr('font-family',"'Noto Sans KR',sans-serif").attr('font-size','11')
+    .attr('font-weight','700').attr('fill','rgba(255,255,255,.85)')
+    .attr('pointer-events','none')
+    .text(d => SIDO_LBL_SHORTENER(d.properties._name || ''));
+}
+
+// ══════════════════════════════════════════════
+//  VIEW STATE MACHINE
+// ══════════════════════════════════════════════
+function applyView() {
+  if (!G) return;
+  const lv = ST.level;
+
+  // ── SIDO layer ──
+  LSIDO.selectAll('.sp')
+    .attr('fill', d => getFill(d.properties._code))
+    .attr('opacity', d => {
+      if (lv === 0) return 1;
+      return d.properties._code === ST.selSido?.code ? 1 : 0.07;
+    })
+    .style('pointer-events', d => {
+      if (lv === 0) return 'auto';
+      // In drill mode SIDO paths are background, not clickable (sgg handles it)
+      return 'none';
+    });
+
+  // ── SGG layer ──
+  const sggVisible = ST.showSgg || lv >= 1;
+  LSGG.style('display', sggVisible ? '' : 'none');
+  if (sggVisible) {
+    LSGG.selectAll('.gp')
+      .attr('fill', d => {
+        if (lv === 0) return getFill(d.properties._code); // overlay: each sgg colored
+        const sc = getSidoCode(d.properties);
+        if (sc === ST.selSido?.code) return getFill(d.properties._code);
+        return DEF_FILL;
+      })
+      .attr('stroke', d => {
+        const sc = getSidoCode(d.properties);
+        if (lv >= 1 && sc === ST.selSido?.code) return SGG_STROKE;
+        return ST.showSgg && lv === 0 ? SGG_STROKE : 'none';
+      })
+      .attr('opacity', d => {
+        const sc = getSidoCode(d.properties);
+        if (lv === 0) return 1;
+        if (lv === 1) return sc === ST.selSido?.code ? 1 : 0.05;
+        if (lv === 2) return sc === ST.selSido?.code ? (d.properties._code === ST.selSgg?.code ? 0.12 : 0.8) : 0.03;
+        return 1;
+      })
+      .style('pointer-events', d => {
+        const sc = getSidoCode(d.properties);
+        if (lv === 0) return ST.showSgg ? 'auto' : 'none';
+        if (lv === 1) return sc === ST.selSido?.code ? 'auto' : 'none';
+        return 'none';
+      });
+  }
+
+  // ── EMD layer ──
+  const emdVisible = ST.showEmd || lv >= 2;
+  LEMD.style('display', emdVisible ? '' : 'none');
+  if (emdVisible) {
+    LEMD.selectAll('.ep')
+      .attr('fill', d => getFill(d.properties._code || ''))
+      .attr('stroke', d => {
+        const sc = d.properties._sidoCode || '';
+        if (lv === 0) return EMD_STROKE;
+        return sc === ST.selSido?.code ? EMD_STROKE : 'none';
+      })
+      .attr('opacity', d => {
+        const sc = d.properties._sidoCode || '';
+        const gc = d.properties._sggCode || '';
+        if (lv === 0) return 1;
+        if (lv === 1) return sc === ST.selSido?.code ? 1 : 0.04;
+        if (lv === 2) return (sc === ST.selSido?.code && gc === ST.selSgg?.code) ? 1 : 0.03;
+        return 1;
+      })
+      .style('pointer-events', d => {
+        if (!ST.cmode) return 'none';
+        if (!ST.showEmd && lv < 2) return 'none';
+        if (lv === 2) return d.properties._sggCode === ST.selSgg?.code ? 'auto' : 'none';
+        return 'auto';
+      });
+  }
+
+  // ── Labels ──
+  LLBL.selectAll('.sl').style('display', lv === 0 ? '' : 'none');
+
+  // ── Nav ──
+  document.getElementById('dnav').style.display = lv > 0 ? 'block' : 'none';
+}
+
+function getFill(code) { return ST.colors[code] || DEF_FILL; }
+
+// ══════════════════════════════════════════════
+//  DRILL DOWN / UP
+// ══════════════════════════════════════════════
+function drillSido(feat) {
+  ST.level = 1;
+  ST.selSido = { code: feat.properties._code, name: feat.properties._name, feat };
+  ST.selSgg  = null;
+  updateBc();
+  applyView();
+  zoomTo(feat, 0.82);
+  // If EMD overlay is on, load emd for this sido
+  if (ST.showEmd && !ST.emdLoaded.has(feat.properties._code)) loadEmdForSido(feat.properties._code);
+}
+
+function drillSgg(feat) {
+  ST.level = 2;
+  const code = feat.properties._code;
+  const sc   = getSidoCode(feat.properties);
+  // Ensure selSido is set
+  if (!ST.selSido && sc) {
+    const sidoFeat = ST.sidoGeo.features.find(f => f.properties._code === sc);
+    if (sidoFeat) ST.selSido = { code: sc, name: sidoFeat.properties._name, feat: sidoFeat };
+  }
+  ST.selSgg = { code, name: feat.properties._name, feat };
+  updateBc();
+  applyView();
+  zoomTo(feat, 0.78);
+  // Load EMD for parent sido
+  if (ST.selSido && !ST.emdLoaded.has(ST.selSido.code)) loadEmdForSido(ST.selSido.code);
+  else { renderEmdLayer(); }
+  LEMD.style('display', '');
+}
+
+function drillBack() {
+  if (ST.level === 2) {
+    ST.level = 1;
+    ST.selSgg = null;
+    updateBc();
+    applyView();
+    if (ST.selSido?.feat) zoomTo(ST.selSido.feat, 0.82);
+  } else {
+    drillNational();
+  }
+}
+
+function drillNational() {
+  ST.level = 0; ST.selSido = null; ST.selSgg = null;
+  updateBc();
+  applyView();
+  SVG.transition().duration(600).ease(d3.easeCubicInOut).call(ST.zoom.transform, d3.zoomIdentity);
+}
+
+function zoomTo(feat, pad = 0.82) {
+  const el  = document.getElementById('msvg');
+  const W   = el.clientWidth  || 900;
+  const H   = el.clientHeight || 700;
+  const [[x0,y0],[x1,y1]] = ST.path.bounds(feat);
+  const scale = Math.min(60, pad / Math.max((x1-x0)/W, (y1-y0)/H));
+  const tx = W/2 - scale*(x0+x1)/2;
+  const ty = H/2 - scale*(y0+y1)/2;
+  SVG.transition().duration(680).ease(d3.easeCubicInOut)
+     .call(ST.zoom.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
+}
+
+// ══════════════════════════════════════════════
+//  LAYER TOGGLES
+// ══════════════════════════════════════════════
+function toggleSgg() {
+  ST.showSgg = !ST.showSgg;
+  document.getElementById('btn-sgg').classList.toggle('on', ST.showSgg);
+  applyView();
+}
+
+async function toggleEmd() {
+  ST.showEmd = !ST.showEmd;
+  document.getElementById('chk-emd').classList.toggle('on', ST.showEmd);
+  applyView();
+  if (ST.showEmd) {
+    if (ST.level === 0) loadAllEmd();
+    else if (ST.selSido && !ST.emdLoaded.has(ST.selSido.code)) await loadEmdForSido(ST.selSido.code);
+    LEMD.style('display', '');
+  }
+}
+
+function onStroke(v) {
+  ST.strokeW = v;
+  if (LSIDO) {
+    const k = ST.xform?.k || 1;
+    LSIDO.attr('stroke-width', v / k);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  COLOR MODE
+// ══════════════════════════════════════════════
+function toggleCmode() {
+  ST.cmode = !ST.cmode;
+  const btn = document.getElementById('btn-cmode');
+  btn.classList.toggle('on', ST.cmode);
+  btn.textContent = ST.cmode ? '🎨 색상 편집 ON' : '🎨 색상 편집 OFF';
+  document.body.classList.toggle('cmode', ST.cmode);
+  if (!ST.cmode) cppClose();
+  applyView();
+}
+
+function fillAll() {
+  const lv = ST.level;
+  if (lv === 0 && !ST.showSgg && !ST.showEmd) {
+    ST.sidoGeo.features.forEach(f => { ST.colors[f.properties._code] = ST.active; });
+  } else if (lv === 0 && ST.showSgg) {
+    ST.sggGeo.features.forEach(f => { ST.colors[f.properties._code] = ST.active; });
+  } else if (lv === 0 && ST.showEmd) {
+    Object.values(ST.emdData).flat().forEach(f => { const c=f.properties._code||''; if(c)ST.colors[c]=ST.active; });
+  } else if (lv === 1) {
+    const sc = ST.selSido?.code;
+    (ST.showEmd && ST.emdLoaded.has(sc)
+      ? (ST.emdData[sc]||[]).map(f=>f.properties._code||'')
+      : ST.sggGeo.features.filter(f=>getSidoCode(f.properties)===sc).map(f=>f.properties._code)
+    ).forEach(code => { if (code) ST.colors[code] = ST.active; });
+  } else if (lv === 2) {
+    const gc = ST.selSgg?.code;
+    (ST.emdData[ST.selSido?.code]||[])
+      .filter(f=>f.properties._sggCode===gc)
+      .forEach(f=>{ const c=f.properties._code||''; if(c) ST.colors[c]=ST.active; });
+  }
+  refreshFills();
+}
+
+function resetColors() {
+  if (!confirm('모든 색상을 초기화하겠습니까?')) return;
+  ST.colors = {};
+  refreshFills();
+}
+
+function refreshFills() {
+  LSIDO?.selectAll('.sp').attr('fill', d => getFill(d.properties._code));
+  LSGG?.selectAll('.gp').attr('fill', d => getFill(d.properties._code));
+  LEMD?.selectAll('.ep').attr('fill', d => getFill(d.properties._code || ''));
+}
+
+// ══════════════════════════════════════════════
+//  COLOR PICKER POPUP
+// ══════════════════════════════════════════════
+let _cppCode = null;
+
+function openCpp(ev, code, name) {
+  _cppCode = code;
+  document.getElementById('cpp-name').textContent = name || code;
+  setCppColor(ST.colors[code] || ST.active);
+  const popup = document.getElementById('cpp');
+  popup.classList.add('on');
+  let x = ev.clientX + 12, y = ev.clientY + 10;
+  if (x + 190 > window.innerWidth)  x = ev.clientX - 200;
+  if (y + 200 > window.innerHeight) y = ev.clientY - 205;
+  popup.style.left = x + 'px';
+  popup.style.top  = y + 'px';
+}
+function cppClose() {
+  document.getElementById('cpp').classList.remove('on');
+  _cppCode = null;
+}
+function setCppColor(c) {
+  document.getElementById('cpp-hex').value = c;
+  document.getElementById('cpp-prev').style.background = c;
+  try { document.getElementById('cpp-nat').value = c; } catch {}
+  document.querySelectorAll('.csw').forEach(s =>
+    s.classList.toggle('sel', s.dataset.c === c)
+  );
+}
+function onCppHex(v) {
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+    document.getElementById('cpp-prev').style.background = v;
+    try { document.getElementById('cpp-nat').value = v; } catch {}
+  }
+}
+function onCppNat(v) {
+  document.getElementById('cpp-hex').value = v;
+  document.getElementById('cpp-prev').style.background = v;
+}
+function cppApply() {
+  if (!_cppCode) return;
+  const c = document.getElementById('cpp-hex').value;
+  if (!/^#[0-9a-fA-F]{6}$/.test(c)) { alert('올바른 색상 코드를 입력하세요 (#RRGGBB)'); return; }
+  ST.colors[_cppCode] = c;
+  setActive(c);
+  refreshFills();
+  cppClose();
+}
+function cppClear() {
+  if (!_cppCode) return;
+  delete ST.colors[_cppCode];
+  refreshFills();
+  cppClose();
+}
+
+// Sidebar color picker
+function setActive(c) {
+  ST.active = c;
+  document.getElementById('cur-dot').style.background = c;
+  document.getElementById('hex-in').value = c;
+  try { document.getElementById('nat-pick').value = c; } catch {}
+  document.querySelectorAll('.sw').forEach(s => s.classList.toggle('sel', s.dataset.c === c));
+}
+function onHexIn(v)   { if (/^#[0-9a-fA-F]{6}$/.test(v)) setActive(v); }
+function onNatPick(v) { setActive(v); }
+
+function initColorUI() {
+  // Sidebar swatches
+  const sg = document.getElementById('sw-grid');
+  sg.innerHTML = '';
+  COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'sw'; d.dataset.c = c;
+    d.style.background = c;
+    d.onclick = () => setActive(c);
+    sg.appendChild(d);
+  });
+  // CPP swatches
+  const cg = document.getElementById('cpp-swatches');
+  cg.innerHTML = '';
+  COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'csw'; d.dataset.c = c;
+    d.style.background = c;
+    d.onclick = () => setCppColor(c);
+    cg.appendChild(d);
+  });
+  setActive(ST.active);
+}
+
+// ══════════════════════════════════════════════
+//  TOOLTIP
+// ══════════════════════════════════════════════
+function showTip(ev, txt) {
+  const t = document.getElementById('tip');
+  t.textContent = txt; t.style.display = 'block';
+  moveTip(ev);
+}
+function moveTip(ev) {
+  const t  = document.getElementById('tip');
+  const wr = document.getElementById('mwrap').getBoundingClientRect();
+  let x = ev.clientX - wr.left + 14;
+  let y = ev.clientY - wr.top  - 10;
+  if (x + 160 > wr.width)  x = ev.clientX - wr.left - 170;
+  if (y + 30  > wr.height) y = ev.clientY - wr.top  - 32;
+  t.style.left = x + 'px';
+  t.style.top  = y + 'px';
+}
+function hideTip() { document.getElementById('tip').style.display = 'none'; }
+
+// ══════════════════════════════════════════════
+//  BREADCRUMB
+// ══════════════════════════════════════════════
+function updateBc() {
+  const lv = ST.level;
+  ['bc1sep','bc1','bc2sep','bc2'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  if (lv >= 1 && ST.selSido) {
+    document.getElementById('bc1sep').style.display = '';
+    const el = document.getElementById('bc1');
+    el.style.display = '';
+    el.textContent = ST.selSido.name;
+    if (lv > 1) {
+      el.className = 'bc'; el.style.cursor = 'pointer'; el.style.color = 'var(--accent2)';
+      el.onclick = () => { ST.level = 1; ST.selSgg = null; updateBc(); applyView(); zoomTo(ST.selSido.feat, 0.82); };
+    } else {
+      el.className = 'bc cur'; el.style.cursor = 'default'; el.style.color = 'var(--text)';
+      el.onclick = null;
+    }
+  }
+  if (lv >= 2 && ST.selSgg) {
+    document.getElementById('bc2sep').style.display = '';
+    const el = document.getElementById('bc2');
+    el.style.display = '';
+    el.textContent = ST.selSgg.name;
+  }
+}
+
+// ══════════════════════════════════════════════
+//  EMD PROGRESS
+// ══════════════════════════════════════════════
+function showEmdProg(on, total = 0, done = 0) {
+  const el = document.getElementById('emd-prog');
+  el.classList.toggle('on', on);
+  if (on) {
+    const pct = total ? Math.round(done / total * 100) : 0;
+    document.getElementById('ep-txt').textContent = `읍면동 로딩 ${done}/${total}개 (${pct}%)`;
+    document.getElementById('ep-fill').style.width = pct + '%';
+  }
+}
+
+// ══════════════════════════════════════════════
+//  LOADING
+// ══════════════════════════════════════════════
+function setLoading(on, txt = '') {
+  document.getElementById('lw').style.display = on ? 'flex' : 'none';
+  if (txt) document.getElementById('ltxt').textContent = txt;
+}
+
+// ══════════════════════════════════════════════
+//  EXPORT PNG
+// ══════════════════════════════════════════════
+function exportPNG() {
+  if (!ST.geoLoaded) { alert('지도가 로드되지 않았습니다.'); return; }
+  const el = document.getElementById('msvg');
+  const s  = new XMLSerializer().serializeToString(el);
+  const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const dpr = window.devicePixelRatio || 2;
+    const c   = document.createElement('canvas');
+    c.width   = el.clientWidth  * dpr;
+    c.height  = el.clientHeight * dpr;
+    const ctx = c.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.drawImage(img, 0, 0);
+    c.toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'KBS_행정구역지도.png';
+      a.click();
+    }, 'image/png');
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+// ══════════════════════════════════════════════
+//  EXPORT PSD (Photopea)
+// ══════════════════════════════════════════════
+async function exportPSD() {
+  if (!ST.geoLoaded) { alert('지도가 로드되지 않았습니다.'); return; }
+
+  const btn = document.getElementById('btn-psd');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span><span>SVG 생성 중...<span class="exp-sub">잠시 기다려 주세요</span></span>';
+
+  try {
+    const W = 1920, H = 1080;
+    const lv  = ST.level;
+    let feats = [], label = '전국_시도';
+
+    // Decide what to export based on current view + layer state
+    if (lv === 0) {
+      if (ST.showEmd && Object.keys(ST.emdData).length) {
+        feats = Object.values(ST.emdData).flat(); label = '전국_읍면동';
+      } else if (ST.showSgg) {
+        feats = ST.sggGeo.features; label = '전국_시군구';
+      } else {
+        feats = ST.sidoGeo.features; label = '전국_시도';
+      }
+    } else if (lv === 1 && ST.selSido) {
+      const sc = ST.selSido.code;
+      if (ST.showEmd && ST.emdLoaded.has(sc)) {
+        feats = ST.emdData[sc] || []; label = ST.selSido.name + '_읍면동';
+      } else {
+        feats = ST.sggGeo.features.filter(f => getSidoCode(f.properties) === sc);
+        label = ST.selSido.name + '_시군구';
+      }
+    } else if (lv === 2 && ST.selSgg) {
+      const sc = ST.selSido?.code;
+      feats = (ST.emdData[sc] || []).filter(f => f.properties._sggCode === ST.selSgg.code);
+      label = ST.selSgg.name + '_읍면동';
+    }
+
+    if (!feats.length) {
+      alert('내보낼 데이터가 없습니다.\n읍면동은 먼저 해당 레이어를 로드해야 합니다.');
+      btn.innerHTML = origHtml; btn.disabled = false; return;
+    }
+
+    const geo  = { type:'FeatureCollection', features: feats };
+    const proj = d3.geoMercator().fitExtent([[60,60],[W-60,H-60]], geo);
+    const pFn  = d3.geoPath().projection(proj).digits(1);
+
+    const regionMap = new Map();
+    feats.forEach(f => {
+      const p    = f.properties;
+      const code = p._code || p.adm_cd || '';
+      const name = p._name || getAdmNm(p) || code;
+      const fill = ST.colors[code] || DEF_FILL;
+      const d    = pFn(f);
+      if (!d) return;
+      if (regionMap.has(name)) regionMap.get(name).arr.push(d);
+      else regionMap.set(name, { fill, arr: [d] });
+    });
+
+    if (!regionMap.size) { alert('내보낼 데이터 없음'); btn.innerHTML = origHtml; btn.disabled = false; return; }
+
+    // Sort Korean alphabetical → last in SVG = top in PSD
+    const regions = [...regionMap.entries()]
+      .map(([name,v]) => ({ name, fill: v.fill, d: v.arr.join(' ') }))
+      .sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+    const rev = [...regions].reverse();
+
+    const pathLines = rev.map((r,i) =>
+      `  <path id="pp_r${i}" fill="${r.fill}" stroke="none" d="${r.d}"/>`
+    );
+    const svgStr = [
+      `<?xml version="1.0" encoding="UTF-8"?>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`,
+      `  <rect id="pp_bg" width="${W}" height="${H}" fill="#04060e"/>`,
+      ...pathLines,
+      `</svg>`
+    ].join('\n');
+
+    const nameMap = Object.fromEntries([
+      ['pp_bg','배경'],
+      ...rev.map((r,i) => [`pp_r${i}`, r.name])
+    ]);
+    const renameScript = `(function(){
+  var m=${JSON.stringify(nameMap)};
+  function walk(ls){for(var i=0;i<ls.length;i++){var l=ls[i];if(m.hasOwnProperty(l.name))l.name=m[l.name];if(l.layers&&l.layers.length)walk(l.layers);}}
+  try{walk(app.activeDocument.layers);}catch(e){}
+  try{app.activeDocument.title=${JSON.stringify(label)};}catch(e){}
+  app.activeDocument.saveToOE("psd");
+})();`;
+
+    btn.innerHTML = `<span>⏳</span><span>Photopea 로딩 중...<span class="exp-sub">${regions.length}개 레이어</span></span>`;
+    _sendToPhotopea(svgStr, renameScript, `KBS_행정구역_${label}.psd`, btn, origHtml);
+
+  } catch(e) {
+    console.error('[PSD]', e);
+    alert('내보내기 오류: ' + e.message);
+    btn.innerHTML = origHtml; btn.disabled = false;
+  }
+}
+
+function _sendToPhotopea(svgStr, renameScript, filename, btn, origHtml) {
+  const restore = () => { if(btn){ btn.innerHTML = origHtml; btn.disabled = false; } };
+  const svgBuf  = new TextEncoder().encode(svgStr).buffer;
+  let step = 0, done = false;
+
+  const ppWin = window.open('https://www.photopea.com', '_blank');
+  if (!ppWin) { alert('팝업이 차단되어 있습니다.\n팝업 허용 후 다시 시도해주세요.'); restore(); return; }
+
+  const handler = e => {
+    if (done || e.source !== ppWin) return;
+    if (e.data === 'done') {
+      step++;
+      console.log('[PSD] done step=' + step);
+      if (step === 1) {
+        ppWin.postMessage(svgBuf, '*');
+        if (btn) btn.innerHTML = `<span>⏳</span><span>SVG 로딩 중...<span class="exp-sub">Photopea 처리 중</span></span>`;
+      } else if (step === 2) {
+        ppWin.postMessage(renameScript, '*');
+        if (btn) btn.innerHTML = `<span>⏳</span><span>PSD 저장 중...<span class="exp-sub">잠시만요</span></span>`;
+      }
+      return;
+    }
+    if (e.data instanceof ArrayBuffer && e.data.byteLength > 1000) {
+      done = true;
+      window.removeEventListener('message', handler);
+      clearTimeout(tid);
+      const blob = new Blob([e.data], { type:'application/octet-stream' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+      restore();
+      console.log(`[PSD] ✅ ${filename} (${(e.data.byteLength/1024).toFixed(0)}KB)`);
+    }
+  };
+  window.addEventListener('message', handler);
+  const tid = setTimeout(() => {
+    if (done) return;
+    done = true;
+    window.removeEventListener('message', handler);
+    restore();
+    alert('Photopea 응답 없음 (3분 초과).\nPhotopea 창에서 File → Save As → PSD로 직접 저장해 주세요.');
+  }, 180000);
+}
+
+// ══════════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════════
+function openSettings() {
+  document.getElementById('in-key').value  = ST.key;
+  document.getElementById('in-sec').value  = ST.secret;
+  document.getElementById('in-prx').value  = ST.proxy;
+  document.getElementById('sov').classList.add('on');
+}
+function closeSettings() { document.getElementById('sov').classList.remove('on'); }
+function saveSettings() {
+  ST.key    = document.getElementById('in-key').value.trim();
+  ST.secret = document.getElementById('in-sec').value.trim();
+  ST.proxy  = document.getElementById('in-prx').value.trim();
+  localStorage.setItem('kbs_map_key',    ST.key);
+  localStorage.setItem('kbs_map_secret', ST.secret);
+  localStorage.setItem('kbs_map_proxy',  ST.proxy);
+  closeSettings();
+}
+async function forceRefresh() {
+  if (!ST.key || !ST.secret || !ST.proxy) {
+    alert('SGIS 키 / Secret / 프록시를 먼저 설정해주세요.');
+    return;
+  }
+  if (!confirm('캐시를 삭제하고 SGIS에서 지도를 새로 받겠습니까?')) return;
+  closeSettings();
+  await dbClearAll();
+  ST.sidoGeo = null; ST.sggGeo = null; ST.emdData = {}; ST.emdLoaded.clear();
+  ST.geoLoaded = false;
+  if (G) SVG.selectAll('*').remove();
+  await fetchSGIS();
+}
+
+// ══════════════════════════════════════════════
+//  RESIZE
+// ══════════════════════════════════════════════
+let _rt = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_rt);
+  _rt = setTimeout(() => { if (ST.geoLoaded) buildMap(); }, 200);
+});
+
+// ══════════════════════════════════════════════
+//  KEYBOARD
+// ══════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,textarea')) return;
+  if (e.key === 'Escape') {
+    if (document.getElementById('cpp').classList.contains('on')) cppClose();
+    else if (document.getElementById('sov').classList.contains('on')) closeSettings();
+    else if (ST.cmode) toggleCmode();
+    else if (ST.level > 0) drillBack();
+  }
+  if (e.key === 'ArrowLeft' && ST.level > 0) drillBack();
+});
+
+// Close CPP on outside click
+document.addEventListener('mousedown', e => {
+  const cpp = document.getElementById('cpp');
+  if (cpp.classList.contains('on') && !cpp.contains(e.target)) cppClose();
+});
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+ST.key    = localStorage.getItem('kbs_map_key')    || '';
+ST.secret = localStorage.getItem('kbs_map_secret') || '';
+ST.proxy  = localStorage.getItem('kbs_map_proxy')  || '';
+
+initColorUI();
+loadGeo();
+</script>
+</body>
+</html>

@@ -236,6 +236,7 @@ body.cmode #mwrap { cursor: crosshair; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
+<script src="lib/svg2psd.js"></script>
 </head>
 <body>
 
@@ -304,7 +305,7 @@ body.cmode #mwrap { cursor: crosshair; }
       </button>
       <button class="exp-btn psd" id="btn-psd" onclick="exportPSD()">
         <span>📐</span>
-        <span>Photopea PSD<span class="exp-sub">현재 뷰 → Shape Layer</span></span>
+        <span>PSD 다운로드<span class="exp-sub">현재 뷰 → Shape Layer</span></span>
       </button>
     </div>
 
@@ -1333,7 +1334,7 @@ function exportPNG() {
 }
 
 // ══════════════════════════════════════════════
-//  EXPORT PSD (Photopea)
+//  EXPORT PSD (브라우저에서 바로 생성)
 // ══════════════════════════════════════════════
 async function exportPSD() {
   if (!ST.geoLoaded) { alert('지도가 로드되지 않았습니다.'); return; }
@@ -1401,30 +1402,19 @@ async function exportPSD() {
     const rev = [...regions].reverse();
 
     const pathLines = rev.map((r,i) =>
-      `  <path id="pp_r${i}" fill="${r.fill}" stroke="none" d="${r.d}"/>`
+      `  <path id="pp_r${i}" data-name="${escAttr(r.name)}" fill="${r.fill}" stroke="none" d="${r.d}"/>`
     );
     const svgStr = [
       `<?xml version="1.0" encoding="UTF-8"?>`,
       `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`,
-      `  <rect id="pp_bg" width="${W}" height="${H}" fill="#04060e"/>`,
+      `  <rect id="pp_bg" data-name="배경" width="${W}" height="${H}" fill="#04060e"/>`,
       ...pathLines,
       `</svg>`
     ].join('\n');
 
-    const nameMap = Object.fromEntries([
-      ['pp_bg','배경'],
-      ...rev.map((r,i) => [`pp_r${i}`, r.name])
-    ]);
-    const renameScript = `(function(){
-  var m=${JSON.stringify(nameMap)};
-  function walk(ls){for(var i=0;i<ls.length;i++){var l=ls[i];if(m.hasOwnProperty(l.name))l.name=m[l.name];if(l.layers&&l.layers.length)walk(l.layers);}}
-  try{walk(app.activeDocument.layers);}catch(e){}
-  try{app.activeDocument.title=${JSON.stringify(label)};}catch(e){}
-  app.activeDocument.saveToOE("psd");
-})();`;
-
-    btn.innerHTML = `<span>⏳</span><span>Photopea 로딩 중...<span class="exp-sub">${regions.length}개 레이어</span></span>`;
-    _sendToPhotopea(svgStr, renameScript, `KBS_행정구역_${label}.psd`, btn, origHtml);
+    btn.innerHTML = `<span>⏳</span><span>PSD 생성 중...<span class="exp-sub">${regions.length}개 레이어</span></span>`;
+    await SVGtoPSD.download(svgStr, `KBS_행정구역_${label}.psd`);
+    btn.innerHTML = origHtml; btn.disabled = false;
 
   } catch(e) {
     console.error('[PSD]', e);
@@ -1433,50 +1423,8 @@ async function exportPSD() {
   }
 }
 
-function _sendToPhotopea(svgStr, renameScript, filename, btn, origHtml) {
-  const restore = () => { if(btn){ btn.innerHTML = origHtml; btn.disabled = false; } };
-  const svgBuf  = new TextEncoder().encode(svgStr).buffer;
-  let step = 0, done = false;
-
-  const ppWin = window.open('https://www.photopea.com', '_blank');
-  if (!ppWin) { alert('팝업이 차단되어 있습니다.\n팝업 허용 후 다시 시도해주세요.'); restore(); return; }
-
-  const handler = e => {
-    if (done || e.source !== ppWin) return;
-    if (e.data === 'done') {
-      step++;
-      console.log('[PSD] done step=' + step);
-      if (step === 1) {
-        ppWin.postMessage(svgBuf, '*');
-        if (btn) btn.innerHTML = `<span>⏳</span><span>SVG 로딩 중...<span class="exp-sub">Photopea 처리 중</span></span>`;
-      } else if (step === 2) {
-        ppWin.postMessage(renameScript, '*');
-        if (btn) btn.innerHTML = `<span>⏳</span><span>PSD 저장 중...<span class="exp-sub">잠시만요</span></span>`;
-      }
-      return;
-    }
-    if (e.data instanceof ArrayBuffer && e.data.byteLength > 1000) {
-      done = true;
-      window.removeEventListener('message', handler);
-      clearTimeout(tid);
-      const blob = new Blob([e.data], { type:'application/octet-stream' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(a.href), 8000);
-      restore();
-      console.log(`[PSD] ✅ ${filename} (${(e.data.byteLength/1024).toFixed(0)}KB)`);
-    }
-  };
-  window.addEventListener('message', handler);
-  const tid = setTimeout(() => {
-    if (done) return;
-    done = true;
-    window.removeEventListener('message', handler);
-    restore();
-    alert('Photopea 응답 없음 (3분 초과).\nPhotopea 창에서 File → Save As → PSD로 직접 저장해 주세요.');
-  }, 180000);
+function escAttr(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 // ══════════════════════════════════════════════
